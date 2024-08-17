@@ -230,7 +230,7 @@ void fft(float in[], size_t stride, float complex out[], size_t n) {
 }
 
 void callbackvar(void *bufferData, unsigned int frames) {
-    if (!IsMusicStreamPlaying(GetCurrentSample(top.CurrentSample).music))
+    if (!top.capturing && !IsMusicStreamPlaying(GetCurrentSample(top.CurrentSample).music))
         return;
     
     // https://cdecl.org/?q=float+%28*fs%29%5B2%5D
@@ -244,7 +244,7 @@ void callbackvar(void *bufferData, unsigned int frames) {
 }
 
 void TimeDomainAnalysis(void* bufferData, unsigned int frames) {
-    if (!IsMusicStreamPlaying(GetCurrentSample(top.CurrentSample).music))
+    if (!top.capturing && !IsMusicStreamPlaying(GetCurrentSample(top.CurrentSample).music))
         return;
     if (frames > N) frames = N;
     float (*fs)[2] = bufferData;
@@ -754,16 +754,16 @@ void toggle_capturing() {
         ma_device_config config = ma_device_config_init(ma_device_type_capture);
         config.playback.format   = ma_format_f32;   // Set to ma_format_unknown to use the device's native format.
         config.playback.channels = 2;               // Set to 0 to use the device's native channel count.
-        config.sampleRate        = 48000;           // Set to 0 to use the device's native sample rate.
+        config.sampleRate        = 41000;           // Set to 0 to use the device's native sample rate.
         config.dataCallback      = ma_callback;   // This function will be called when miniaudio needs more data.
         config.pUserData         = NULL;   // Can be accessed from the device object (device.pUserData).
-        
         
         if (ma_device_init(NULL, &config, &top.device) != MA_SUCCESS) {
             exit(1);
         }
         
         ma_device_start(&top.device);
+
     }
     else {
         ma_device_uninit(&top.device);
