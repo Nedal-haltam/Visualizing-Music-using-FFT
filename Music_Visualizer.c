@@ -14,7 +14,7 @@
     #define N (1<<11)
 #endif
 
-#define Tracker_Radius 20
+#define Tracker_Radius 16
 #define fgap 20
 #define playlist_width 220
 #define tracker_height 130
@@ -585,10 +585,10 @@ void ManagePlayList() {
     // drawing the playlist
     static float playlist_scroll = 0;
     static float scroll_velocity = 0;
-    float playlist_boundary_height = h - 100;
+    float playlist_boundary_height = h - 100-Tracker_Radius;
     float item_height = playlist_boundary_height*(0.07f);
     Rectangle playlist_boundary = { .x = 0, .y = 0, .width = playlist_width, .height = playlist_boundary_height };
-    
+    bool colplaylistboundary = CheckCollisionPointRec(top.mp, playlist_boundary);
     
     if (CheckCollisionPointRec(top.mp, playlist_boundary)) {
         scroll_velocity *= 0.9;
@@ -604,13 +604,13 @@ void ManagePlayList() {
     
     playlist_boundary.y = playlist_scroll;
     
-    BeginScissorMode(playlist_boundary.x, 0, playlist_boundary.width, playlist_boundary.height-Tracker_Radius);
+    BeginScissorMode(playlist_boundary.x, 0, playlist_boundary.width, playlist_boundary.height);
     for (size_t i = 0; i < top.samples.count; i++) {
         Rectangle rec = { .x = 0, .y = i*item_height + playlist_boundary.y+5*i, 
                           .width = playlist_boundary.width, .height = item_height };
         bool colrec = CheckCollisionPointRec(top.mp, rec);
         Color color;
-        if (colrec) {
+        if (colrec && colplaylistboundary) {
             color = BLUE;
             if (top.btnR) {
                 UpdateMusicPlaying(i);
