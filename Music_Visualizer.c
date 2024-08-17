@@ -230,21 +230,21 @@ void fft(float in[], size_t stride, float complex out[], size_t n) {
 }
 
 void callbackvar(void *bufferData, unsigned int frames) {
-    if (!top.capturing && !IsMusicStreamPlaying(GetCurrentSample(top.CurrentSample).music))
+    if (!top.capturing && GetCurrentSample(top.CurrentSample).paused)
         return;
     
     // https://cdecl.org/?q=float+%28*fs%29%5B2%5D
     float (*fs)[2] = bufferData;
-
+    
     for (size_t i = 0; i < frames; ++i) {
         memmove(top.in_raw, top.in_raw + 1, (N - 1)*sizeof(top.in_raw[0]));
         top.in_raw[N-1] = fs[i][0];
     }
-
+    
 }
 
 void TimeDomainAnalysis(void* bufferData, unsigned int frames) {
-    if (!top.capturing && !IsMusicStreamPlaying(GetCurrentSample(top.CurrentSample).music))
+    if (!top.capturing && GetCurrentSample(top.CurrentSample).paused)
         return;
     if (frames > N) frames = N;
     float (*fs)[2] = bufferData;
@@ -409,11 +409,11 @@ void fft_render(Rectangle boundary, size_t m) {
 }
 
 void ShowFFT(Rectangle Show_boundary) {
-    size_t m = fft_analyze(1.0f/Display_FPS);
+    size_t m = fft_analyze(GetFrameTime());
     
     BeginScissorMode(Show_boundary.x, Show_boundary.y, Show_boundary.width, Show_boundary.height);
-    if (var)
-        fft_render(Show_boundary, m);
+    
+    fft_render(Show_boundary, m);
     EndScissorMode();
 }
 
@@ -469,13 +469,13 @@ float normalize_volx(float val , float lower , float upper) {
 void UpdateMusicPlaying(size_t index) {
     
     if (0 <= index && index < top.samples.count && index != top.CurrentSample) {
-        PauseMusicStream(GetCurrentSample(index).music);
+        if (0 <= top.CurrentSample && top.CurrentSample < top.samples.count)
+            PauseMusicStream(GetCurrentSample(top.CurrentSample).music);
         top.CurrentSample = index;
         if (!GetCurrentSample(top.CurrentSample).paused) PlayMusicStream(GetCurrentSample(top.CurrentSample).music);
         top.len = GetMusicTimeLength(GetCurrentSample(top.CurrentSample).music);
         SetMusicVolume(GetCurrentSample(top.CurrentSample).music , top.volume);
     }
-    
 }
 
 void Toggle_CurrenSampleState() {
@@ -561,16 +561,16 @@ void ManagePlayList() {
                 
                 Music music = LoadMusicStream(fpl.paths[i]);
                 if (IsMusicReady(music)) {
+                    if (var)
+                        AttachAudioStreamProcessor(music.stream, callbackvar);
+                    else
+                        AttachAudioStreamProcessor(music.stream, callback);
                     nob_da_append(&top.samples, (CLITERAL(Sample) {
                         .file_name = strdup(fpl.paths[i]), 
                         .name = strdup(temp),
                         .music = music,
                         .paused = false,
                     }));
-                    if (var)
-                        AttachAudioStreamProcessor(music.stream, callbackvar);
-                    else
-                        AttachAudioStreamProcessor(music.stream, callback);
                 }
                 else {
                     POPUP_ErrorFileNotSupported(fpl.paths[i]);
@@ -604,7 +604,7 @@ void ManagePlayList() {
     
     playlist_boundary.y = playlist_scroll;
     
-    BeginScissorMode(playlist_boundary.x, 0, playlist_boundary.width, playlist_boundary.height);
+    BeginScissorMode(playlist_boundary.x, 0, playlist_boundary.width, playlist_boundary.height-Tracker_Radius);
     for (size_t i = 0; i < top.samples.count; i++) {
         Rectangle rec = { .x = 0, .y = i*item_height + playlist_boundary.y+5*i, 
                           .width = playlist_boundary.width, .height = item_height };
