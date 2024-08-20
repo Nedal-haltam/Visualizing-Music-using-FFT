@@ -7,6 +7,15 @@
 #include "math.h"
 #include "nob.c"
 #include "miniaudio.c"
+
+#define GetCurrentSample(cs) top.samples.items[cs]
+#define PLAYSTATEPATH ".\\resources\\icons\\play.png"
+#define PAUSESTATEPATH ".\\resources\\icons\\pause.png"
+#define VOLUMEHIGHICONPATH ".\\resources\\icons\\volumehigh.png"
+#define VOLUMEMUTEICONPATH ".\\resources\\icons\\mute.png"
+#define APPICONPATH ".\\resources\\icons\\images.png"
+#define SHADERCIRCLEPATH ".\\resources\\shaders\\glsl330\\circle.fs"
+
 #define var true
 #if var
     #define N (1<<13)
@@ -18,18 +27,10 @@
 #define fgap 20
 #define playlist_width 220
 #define tracker_height 130
-
+#define volline_height 6
 #define FPS 60
 #define Display_FPS 70
-
-#define GetCurrentSample(cs) top.samples.items[cs]
-#define PLAYSTATEPATH ".\\resources\\icons\\play.png"
-#define PAUSESTATEPATH ".\\resources\\icons\\pause.png"
-#define VOLUMEHIGHICONPATH ".\\resources\\icons\\volumehigh.png"
-#define VOLUMEMUTEICONPATH ".\\resources\\icons\\mute.png"
-
 #define scale 0.07f
-#define GLSL_VERSION 330
 
 #define cfromreal(re) (re)
 #define cfromimag(im) ((im)*I)
@@ -110,6 +111,7 @@ Entity top;
 //TODO:  -tooltip for shwing key pressing and showing the volline when hovering on icon
 //       -popup for failure
 //       -rendering video
+//       -Draw the time played in the following format hh:mm:ss 
 
 float amp(float complex z) {
     float a = crealf(z);
@@ -136,9 +138,9 @@ void load_assets(void) {
     top.VolumeMute_icon.width *= scale;
     top.VolumeMute_icon.height *= scale;
     
-    Image icon = LoadImage(".\\resources\\icons\\images.png");
+    Image icon = LoadImage(APPICONPATH);
     SetWindowIcon(icon);
-    top.shader = LoadShader(NULL, ".\\resources\\shaders\\glsl330\\circle.fs");
+    top.shader = LoadShader(NULL, SHADERCIRCLEPATH);
     top.shader_radius_location = GetShaderLocation(top.shader, "radius");
     top.shader_power_location = GetShaderLocation(top.shader, "power");
     UnloadImage(icon);
@@ -155,7 +157,6 @@ void Init() {
     InitWindow(w, h, "Mymusulizer");
     SetTargetFPS(FPS);    
     InitAudioDevice();
-    SetRandomSeed(0);
     PlayListClean();
     top.CurrentSample = -1;
     top.btnD = false;
@@ -187,28 +188,6 @@ void fft_clean(void) {
     memset(top.out, 0, sizeof(top.out));
 }
 
-void fftt(float input[], size_t stride , float complex output[] , size_t n) {
-    
-    if (n < 1)
-        return;
-    
-    if (n == 1) {
-        output[0] = input[0];
-        return;
-    }
-    
-    fftt(input , stride*2 , output , n/2);
-    fftt(input + stride, stride*2 , output + n/2 , n/2);
-    
-    for (size_t i = 0; i < n/2; i++) {
-        float t = (float)i / n;
-        float complex h = cexp(-2*I*PI*t)*output[i + n/2];
-        float complex e = output[i];
-        output[i]     = e + h;
-        output[i+n/2] = e - h;
-    }
-}
-
 void fft(float in[], size_t stride, float complex out[], size_t n) {
     assert(n > 0);
 
@@ -229,9 +208,8 @@ void fft(float in[], size_t stride, float complex out[], size_t n) {
     }
 }
 
+
 void callbackvar(void *bufferData, unsigned int frames) {
-    if (!top.capturing && GetCurrentSample(top.CurrentSample).paused)
-        return;
     
     // https://cdecl.org/?q=float+%28*fs%29%5B2%5D
     float (*fs)[2] = bufferData;
@@ -244,8 +222,7 @@ void callbackvar(void *bufferData, unsigned int frames) {
 }
 
 void TimeDomainAnalysis(void* bufferData, unsigned int frames) {
-    if (!top.capturing && GetCurrentSample(top.CurrentSample).paused)
-        return;
+
     if (frames > N) frames = N;
     float (*fs)[2] = bufferData;
     for (size_t i = 0; i < frames; i++) {
@@ -267,12 +244,19 @@ void callback(void *bufferData, unsigned int frames) {
 }
 
 void ma_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
-    if (var)
+    
+    #if var
         callbackvar((void*)pInput,frameCount);
-    else
+    #else
         callback((void*)pInput,frameCount);
+    #endif
+    //if (var)
+    //    callbackvar((void*)pInput,frameCount);
+    //else
+    //    callback((void*)pInput,frameCount);
     (void)pOutput;
     (void)pDevice;
+    
 }
 
 size_t fft_analyze(float dt) {
@@ -409,16 +393,16 @@ void fft_render(Rectangle boundary, size_t m) {
 }
 
 void ShowFFT(Rectangle Show_boundary) {
+    
     size_t m = fft_analyze(GetFrameTime());
     
     BeginScissorMode(Show_boundary.x, Show_boundary.y, Show_boundary.width, Show_boundary.height);
-    
     fft_render(Show_boundary, m);
     EndScissorMode();
 }
 
 void FreqDomainAnalysis() {
-    fftt(top.in2, 1, top.out, N);
+    fft(top.in2, 1, top.out, N);
 }
 
 void FreqDomainVisual(Rectangle boundary) {
@@ -456,42 +440,52 @@ void FreqDomainVisual(Rectangle boundary) {
     }
 }
 
-float normalize_volx(float val , float lower , float upper) {
+float limit(float val, float lower, float upper) {
+    // if val < lower return lower, else if val > upper return upper else return val;
+    return (val < lower) ? (lower) : ((val  > upper) ? (upper) : (val));
+}
+
+float normalize_val(float val , float lower , float upper) {
     
-    if (val < lower)
-        val = lower;
-    else if (val > upper)
-        val = upper;
-    val = (float)(val - lower) / (upper - lower);
-    return val;
+    val = limit(val, lower, upper);
+    return (float)(val - lower) / (upper - lower);
+    
 }
 
 void UpdateMusicPlaying(size_t index) {
     
-    if (0 <= index && index < top.samples.count && index != top.CurrentSample) {
-        if (0 <= top.CurrentSample && top.CurrentSample < top.samples.count)
+    if (index != top.CurrentSample && 0 <= index && index < top.samples.count) {
+        if (0 <= top.CurrentSample && top.CurrentSample < top.samples.count && IsMusicReady(GetCurrentSample(top.CurrentSample).music))
             PauseMusicStream(GetCurrentSample(top.CurrentSample).music);
+        
         top.CurrentSample = index;
-        if (!GetCurrentSample(top.CurrentSample).paused) PlayMusicStream(GetCurrentSample(top.CurrentSample).music);
+        
+        if (!GetCurrentSample(top.CurrentSample).paused) 
+            PlayMusicStream(GetCurrentSample(top.CurrentSample).music);
+        
         top.len = GetMusicTimeLength(GetCurrentSample(top.CurrentSample).music);
         SetMusicVolume(GetCurrentSample(top.CurrentSample).music , top.volume);
     }
+    
 }
 
 void Toggle_CurrenSampleState() {
     
-    if (IsMusicStreamPlaying(GetCurrentSample(top.CurrentSample).music)) {
-        PauseMusicStream(GetCurrentSample(top.CurrentSample).music);
-        GetCurrentSample(top.CurrentSample).paused = true;
-    }
-    else {
-        ResumeMusicStream(GetCurrentSample(top.CurrentSample).music);
-        GetCurrentSample(top.CurrentSample).paused = false;
+    if (0 <= top.CurrentSample && top.CurrentSample < top.samples.count && IsMusicReady(GetCurrentSample(top.CurrentSample).music)) {
+        if (IsMusicStreamPlaying(GetCurrentSample(top.CurrentSample).music)) {
+            PauseMusicStream(GetCurrentSample(top.CurrentSample).music);
+            GetCurrentSample(top.CurrentSample).paused = true;
+        }
+        else {
+            ResumeMusicStream(GetCurrentSample(top.CurrentSample).music);
+            GetCurrentSample(top.CurrentSample).paused = false;
+        }
     }
     
 }
 
 void DrawNumber(float n, float marginx, float marginy) {
+    
     DrawText(TextFormat("%.0f", n), w - marginx , h - marginy, 20, WHITE);
     
 }
@@ -503,35 +497,36 @@ void Update() {
     top.mp = GetMousePosition();
     UpdateMusicStream(GetCurrentSample(top.CurrentSample).music);    
     top.t0  = GetMusicTimePlayed(GetCurrentSample(top.CurrentSample).music);
-    DrawNumber(top.t0, 50.0f, 50.0f);        // time indication
     if (IsKeyPressed(KEY_SPACE)) {
         Toggle_CurrenSampleState();
     }
+    top.Tracker_center.y = h - 100;
 }
 
 void ManageTracker() {
-    Rectangle tracker = { .x = 0, .y = h - 100, .width = w, .height = 1 };
+    Rectangle tracker = { .x = 0, .y = top.Tracker_center.y, .width = w, .height = 1 };
+    Rectangle tracker_boundary = { .x = 0, .y = top.Tracker_center.y - Tracker_Radius, .width = w, .height = 2 * Tracker_Radius };
     DrawRectangleRec(tracker, GRAY); // line for the tracker
     float posx = (top.t0/top.len)*w;        
-    if (top.btnP && (top.Tracker_center.y - Tracker_Radius <= top.mp.y && top.mp.y <= top.Tracker_center.y + Tracker_Radius)) {
+    bool collision_with_a_tracker_boundary = CheckCollisionPointRec(top.mp, tracker_boundary);
+    if (top.btnP && collision_with_a_tracker_boundary) {
         top.trackerdrag = true;
         PauseMusicStream(GetCurrentSample(top.CurrentSample).music);
         SeekMusicStream(GetCurrentSample(top.CurrentSample).music, (posx)*(top.len/(w)));
     }
     if (top.trackerdrag) {
         posx = top.mp.x;
-        if (posx <= 0) posx = 0.01f;
-        if (posx >= w) posx = w;
-        PauseMusicStream(GetCurrentSample(top.CurrentSample).music);
-        SeekMusicStream(GetCurrentSample(top.CurrentSample).music, (posx)*(top.len/w));
-        if (top.btnR)
+        posx = limit(posx, 0.0f, w);
+        if (top.btnR) {
             top.trackerdrag = false;
+            SeekMusicStream(GetCurrentSample(top.CurrentSample).music, (posx)*(top.len/w));
+        }
         if (!top.trackerdrag && !GetCurrentSample(top.CurrentSample).paused) {
             ResumeMusicStream(GetCurrentSample(top.CurrentSample).music);
         }
     }
+    DrawNumber((posx)*(top.len/w), 50.0f, 50.0f); // time indication
     top.Tracker_center.x = posx;
-    top.Tracker_center.y = h - 100;
     DrawCircleV(top.Tracker_center, Tracker_Radius, GRAY);
 }
 
@@ -547,7 +542,7 @@ void file_name_to_name(const char* file_name, char* name) {
 }
 
 void POPUP_ErrorFileNotSupported(char* name) {
-    
+    //TODO: NOT IMPLEMENTED
 }
 
 void ManagePlayList() {
@@ -561,10 +556,13 @@ void ManagePlayList() {
                 
                 Music music = LoadMusicStream(fpl.paths[i]);
                 if (IsMusicReady(music)) {
-                    if (var)
+                    
+                    #if var
                         AttachAudioStreamProcessor(music.stream, callbackvar);
-                    else
+                    #else
                         AttachAudioStreamProcessor(music.stream, callback);
+                    #endif
+                    
                     nob_da_append(&top.samples, (CLITERAL(Sample) {
                         .file_name = strdup(fpl.paths[i]), 
                         .name = strdup(temp),
@@ -585,8 +583,8 @@ void ManagePlayList() {
     // drawing the playlist
     static float playlist_scroll = 0;
     static float scroll_velocity = 0;
-    float playlist_boundary_height = h - 100-Tracker_Radius;
-    float item_height = playlist_boundary_height*(0.07f);
+    float playlist_boundary_height = top.Tracker_center.y - Tracker_Radius;
+    float item_height = playlist_boundary_height * (0.07f);
     Rectangle playlist_boundary = { .x = 0, .y = 0, .width = playlist_width, .height = playlist_boundary_height };
     bool colplaylistboundary = CheckCollisionPointRec(top.mp, playlist_boundary);
     
@@ -596,40 +594,40 @@ void ManagePlayList() {
         playlist_scroll += scroll_velocity * GetFrameTime(); 
     }
     
-        
+    // not to able to scroll up more than it should be
     if (playlist_scroll > 0) playlist_scroll = 0;
+    // not to be able to scroll if the playlist page is not full
     if (playlist_scroll < 0 && top.samples.count * (item_height + 5) <= playlist_boundary_height) playlist_scroll = 0;
+    // no to be able to scroll down more than it should be
     if (playlist_scroll < 0 && playlist_scroll + top.samples.count * (item_height + 5) - playlist_boundary_height <= 0)
-        playlist_scroll = -1*(top.samples.count * (item_height + 5) - playlist_boundary_height);
+        playlist_scroll = -1 * (top.samples.count * (item_height + 5) - playlist_boundary_height);
     
     playlist_boundary.y = playlist_scroll;
     
     BeginScissorMode(playlist_boundary.x, 0, playlist_boundary.width, playlist_boundary.height);
     for (size_t i = 0; i < top.samples.count; i++) {
-        Rectangle rec = { .x = 0, .y = i*item_height + playlist_boundary.y+5*i, 
+        Rectangle rec = { .x = 0, .y = i * (item_height + 5) + playlist_boundary.y, 
                           .width = playlist_boundary.width, .height = item_height };
-        bool colrec = CheckCollisionPointRec(top.mp, rec);
+        bool col_with_item = CheckCollisionPointRec(top.mp, rec);
         Color color;
-        if (colrec && colplaylistboundary) {
+        if (colplaylistboundary && col_with_item)
             color = BLUE;
-            if (top.btnR) {
-                UpdateMusicPlaying(i);
-            }
-        }   
-        else {
+        else
             color = RED;
-        }
+        // if music is selected then update the currently playing music
+        if (colplaylistboundary && col_with_item && top.btnR)
+            UpdateMusicPlaying(i);
+        
         DrawRectangleRounded(rec, 0.4f, 20, color);
-        DrawText(TextFormat("%d-%s",i+1,(char*)top.samples.items[i].name), 0, rec.y + rec.height/2 - 10, 20, WHITE);
+        DrawText(TextFormat("%d-%s",i+1,top.samples.items[i].name), 0, rec.y + rec.height/2 - 10, 20, WHITE);
     }
     EndScissorMode();
     
     if (top.samples.count > 0) {
-        DrawRectangle(playlist_width, 0, 1, h - 100, GRAY); // line to split the playlist and the FFT
+        DrawRectangle(playlist_width, 0, 1, top.Tracker_center.y, GRAY); // line to split the playlist and the FFT
     }
-    const char* samplescount = TextFormat("Samples Count : %d",top.samples.count);
+    const char* samplescount/*[20]*/ = TextFormat("Samples Count : %d",top.samples.count);
     DrawText(samplescount, w - MeasureText(samplescount, 20) - 5, 0, 20, WHITE);
-    //free(samplescount);
 }
 
 void MusicSettings() {
@@ -643,7 +641,7 @@ void MusicSettings() {
     
     bool btnresetcol = CheckCollisionPointRec(top.mp, btnreset);
     
-    if (IsMusicReady(GetCurrentSample(top.CurrentSample).music) && btnresetcol && top.btnR) {
+    if (btnresetcol && top.btnR && IsMusicReady(GetCurrentSample(top.CurrentSample).music)) {
         SeekMusicStream(GetCurrentSample(top.CurrentSample).music, 0.0f);
     }
     
@@ -663,31 +661,38 @@ void MusicSettings() {
     
     
     // Volume
-    static float volx = 0;
-    static float volRadius = 7.0f;
-    
+    static float volRadius = 10.0f;
     Vector2 Volume_icon_pos = { .x = PlayingState_pos.x + top.Playstate.width + fgap, .y =  btnreset.y + btnreset.height/2 - top.VolumeHigh_icon.height/2 };
-    Rectangle Volume_boundary = { .x =  Volume_icon_pos.x, .y = Volume_icon_pos.y, .width = top.VolumeHigh_icon.width, .height = top.VolumeHigh_icon.height };
-    float volline_height = 6;
+    Rectangle Volume_icon_boundary = { .x =  Volume_icon_pos.x, .y = Volume_icon_pos.y, .width = top.VolumeHigh_icon.width, .height = top.VolumeHigh_icon.height };
     Rectangle volline = {
-        .x = Volume_icon_pos.x + top.VolumeHigh_icon.width + fgap+20 , .y = btnreset.y + btnreset.height/2 - volline_height/2,
+        .x = Volume_icon_pos.x + top.VolumeHigh_icon.width + fgap + 20 , .y = btnreset.y + btnreset.height/2 - volline_height/2,
         .width = 250 , .height = volline_height
     };
     
-    if (CheckCollisionPointRec(top.mp, Volume_boundary) && top.btnR) {
+    if (CheckCollisionPointRec(top.mp, Volume_icon_boundary) && top.btnR) {
         if (!top.muted) {
-            top.volume_before_mute = volline.x + top.volume * volline.width;
-            //ChangeVolume(0);
-            volx = normalize_volx(0 , volline.x , volline.x + volline.width);                 
-            top.volume = volx;                                                     
+            top.volume = 0;
             SetMusicVolume(GetCurrentSample(top.CurrentSample).music , top.volume);
         }
         else {
-            //ChangeVolume(top.volume_before_mute);
-            volx = normalize_volx(top.volume_before_mute , volline.x , volline.x + volline.width);
-            top.volume = volx;                                                     
+            top.volume = top.volume_before_mute;
             SetMusicVolume(GetCurrentSample(top.CurrentSample).music , top.volume);
         }   
+    }
+    
+    DrawRectangleRounded(volline, 10.0f, 1, WHITE);
+    bool colVolcir = CheckCollisionPointCircle(top.mp, top.Volume_center, volRadius);
+    Rectangle Volume_boundary = { .x = volline.x, .y =  top.Volume_center.y - volRadius, .width = volline.width, .height = 2 * volRadius };
+    bool col_volume_boundary = CheckCollisionPointRec(top.mp, Volume_boundary);
+    if (top.btnP && col_volume_boundary) {
+        top.volumedrag = true;
+    }
+    if (top.volumedrag) {
+        top.volume = normalize_val(top.mp.x , volline.x , volline.x + volline.width);
+        SetMusicVolume(GetCurrentSample(top.CurrentSample).music , top.volume);
+        top.volume_before_mute = top.volume;
+        if (top.btnR)
+            top.volumedrag = false;
     }
     
     if (top.volume == 0.0f) {
@@ -699,33 +704,16 @@ void MusicSettings() {
         top.muted = false;
     }
     
-    DrawRectangleRounded(volline, 10.0f, 1, WHITE);
-    bool colVolcir = CheckCollisionPointCircle(top.mp , top.Volume_center , volRadius);
-    bool colvolline = CheckCollisionPointRec(top.mp, volline);
-    bool ybound = top.Volume_center.y - volRadius <= top.mp.y && top.mp.y <= top.Volume_center.y + volRadius;
-    bool xbound = volline.x <= top.mp.x && top.mp.x <= volline.x + volline.width;
-    if (top.btnP && (colvolline || colVolcir || ( xbound && ybound ))) {
-        top.volumedrag = true;
-    }
-    if (top.volumedrag) {
-        volx = top.mp.x;
-        //ChangeVolume(volx);
-        volx = normalize_volx(volx , volline.x , volline.x + volline.width);  
-        top.volume = volx;
-        if (top.volume == 0) top.volume_before_mute = 0;
-        SetMusicVolume(GetCurrentSample(top.CurrentSample).music , top.volume);
-        if (top.btnR)
-            top.volumedrag = false;
-    }
+    
     volRadius = (top.volumedrag || colVolcir) ? 14.0f : 10.0f;
-    top.Volume_center.x = volline.x + volx * volline.width;
+    top.Volume_center.x = volline.x + top.volume * volline.width;
     top.Volume_center.y = volline.y + volline.height/2;
     DrawCircleV(top.Volume_center, volRadius, WHITE);
-    if (colVolcir || colvolline || top.volumedrag) {
-        int Text_volume_x = volline.x + volline.width + 10;
-        const char* volume_text = TextFormat("Volume: %.2f%%", top.volume*100.0f);
-        DrawText(volume_text, Text_volume_x, volline.y - 10, 20, WHITE);
-        //free(volume_text);
+    if (col_volume_boundary) {
+        int Text_volume_x = volline.x + volline.width + volRadius + 5;
+        int text_height = 20;
+        const char* volume_text/*[16]*/ = TextFormat("Volume: %.2f%%", top.volume*100.0f);
+        DrawText(volume_text, Text_volume_x, top.Volume_center.y - text_height/2, text_height, WHITE);
     }
 }
 
@@ -740,17 +728,14 @@ void ManageFeatures() {
 
 void Init_Screen() {
     int height = 50;
-    const char *text = "Drag & Drop Music";
+    char text[18] = "Drag & Drop Music";
     int width = MeasureText(text, height);
     DrawText(text, w/2 - width/2, h/2 - height/2, height, WHITE);
-    //free(text);
 }
 
 void toggle_capturing() {
     top.capturing = !top.capturing;
     if (top.capturing) {
-        if (top.CurrentSample >= 0 && IsMusicReady(GetCurrentSample(top.CurrentSample).music))
-            PauseMusicStream(GetCurrentSample(top.CurrentSample).music);
         ma_device_config config = ma_device_config_init(ma_device_type_capture);
         config.playback.format   = ma_format_f32;   // Set to ma_format_unknown to use the device's native format.
         config.playback.channels = 2;               // Set to 0 to use the device's native channel count.
@@ -759,26 +744,34 @@ void toggle_capturing() {
         config.pUserData         = NULL;   // Can be accessed from the device object (device.pUserData).
         
         if (ma_device_init(NULL, &config, &top.device) != MA_SUCCESS) {
-            exit(1);
+            fprintf(stderr,"Microphone Not Initialized Successfuly\n");
+            POPUP_ErrorFileNotSupported("Microphone Not Initialized Successfuly\n");
+            top.capturing = false;
+            return;
         }
-        
+        if (top.CurrentSample >= 0 && IsMusicReady(GetCurrentSample(top.CurrentSample).music))
+            PauseMusicStream(GetCurrentSample(top.CurrentSample).music);
         ma_device_start(&top.device);
 
     }
     else {
         ma_device_uninit(&top.device);
-        if (top.CurrentSample >= 0 && IsMusicReady(GetCurrentSample(top.CurrentSample).music) && !GetCurrentSample(top.CurrentSample).paused)
+        if (0 <= top.CurrentSample && top.CurrentSample < top.samples.count && IsMusicReady(GetCurrentSample(top.CurrentSample).music) && !GetCurrentSample(top.CurrentSample).paused)
             PlayMusicStream(GetCurrentSample(top.CurrentSample).music);
         fft_clean();
     }
 }
 
 void Visualize_FFT(Rectangle boundary) {
-
-    if (var)
+    #if var
         ShowFFT(boundary);
-    else
+    #else
         FreqDomainVisual(boundary);
+    #endif
+    //if (var)
+    //    ShowFFT(boundary);
+    //else
+    //    FreqDomainVisual(boundary);
 }
 
 int main(void)
@@ -835,8 +828,8 @@ int main(void)
     UnloadShader(top.shader);
     // De-Initialization
     //--------------------------------------------------------------------------------------
-    CloseAudioDevice();
     ma_device_uninit(&top.device);
+    CloseAudioDevice();
     CloseWindow();        // Close window and OpenGL context
     //--------------------------------------------------------------------------------------
 
