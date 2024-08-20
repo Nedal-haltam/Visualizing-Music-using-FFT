@@ -1,5 +1,4 @@
 # 🎤 Voice Capture & Window Mode Toggle
-
 ## 🚀 Features
 
 - **Capture Voice**: Press `C` to activate/deactivate voice capture through your microphone.
@@ -16,7 +15,7 @@
   - Press `F` to enter borderless mode, providing a clean, distraction-free viewing experience.
   - Press `F` again to return to the standard window mode.
  
-
+# Main Page
 ![alt text](https://github.com/Nedal-haltam/Visualizing-Music-using-FFT/blob/main/ScreenShot_of_the_main_page.png?raw=true)
 
 
