@@ -4,7 +4,7 @@
 
 - **Capture Voice**: Press `C` to activate/deactivate voice capture through your microphone.
 - **Toggle Window Mode**: Press `F` to switch between borderless mode and the standard window mode for a seamless viewing experience.
-- - **Files Format Supported**: .ogg, .mp3, .wav, .qoa, .xm, .mod.
+- **Files Format Supported**: .ogg, .mp3, .wav, .qoa, .xm, .mod.
 
 ## 🛠️ Usage
 
