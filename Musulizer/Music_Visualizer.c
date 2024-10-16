@@ -613,9 +613,9 @@ void ManagePlayList() {
         bool col_with_item = CheckCollisionPointRec(top.mp, rec);
         Color color;
         if (colplaylistboundary && col_with_item)
-            color = BLUE;
+            color = DARKGRAY;
         else
-            color = RED;
+            color = GRAY;
         // if music is selected then update the currently playing music
         if (colplaylistboundary && col_with_item && top.btnR)
             UpdateMusicPlaying(i);
