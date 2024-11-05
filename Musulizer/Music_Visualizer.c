@@ -7,7 +7,7 @@
 #include "math.h"
 #include "nob.c"
 #include "miniaudio.c"
-
+ 
 #define GetCurrentSample(cs) top.samples.items[cs]
 #define PLAYSTATEPATH ".\\resources\\icons\\play.png"
 #define PAUSESTATEPATH ".\\resources\\icons\\pause.png"
