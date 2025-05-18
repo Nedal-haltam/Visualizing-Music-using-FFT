@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <math.h>
-
+#include <assert.h>
 #include "raylib.h"
 #include "nob.c"
 #include "miniaudio.c"
@@ -106,10 +106,7 @@ typedef struct {
 
 Entity top;
 
-//TODO:  -tooltip for shwing key pressing and showing the volline when hovering on icon
-//       -popup for failure
-//       -rendering video
-//       -Draw the time played in the following format hh:mm:ss 
+// TODO: rendering video
 
 float amp(mycomplex z) {
     float a = z.x;
@@ -532,7 +529,13 @@ void ManageTracker() {
             ResumeMusicStream(GetCurrentSample(top.CurrentSample).music);
         }
     }
-    DrawNumber((posx) * (top.len / w), 50.0f, 50.0f); // time indication
+    // hh:mm:ss
+    int Seconds = (int)top.t0 % 60;
+    int Minutes = (int)(top.t0 / 60) % 60;
+    int Hours = (int)Minutes / 60;
+    const char* DurationText = TextFormat("%d%d:%d%d:%d%d", Hours/10, Hours%10, Minutes/10, Minutes%10, Seconds/10, Seconds%10);
+    int DurationLength = MeasureText(DurationText, 20);
+    DrawText(DurationText, w - DurationLength - 40, h - 65, 20, WHITE);
     top.Tracker_center.x = posx;
     DrawCircleV(top.Tracker_center, Tracker_Radius, GRAY);
 }
@@ -550,7 +553,7 @@ void file_name_to_name(const char* file_name, char* name) {
 
 void POPUP_ErrorFileNotSupported(char* name) {
     (void)name;
-    //TODO: NOT IMPLEMENTED
+    assert(0 && "UNREACHABLE");
 }
 
 void ManagePlayList() {
