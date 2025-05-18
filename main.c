@@ -848,12 +848,8 @@ int main(void)
     UnloadTexture(top.VolumeHigh_icon);
     UnloadTexture(top.VolumeMute_icon);
     UnloadShader(top.shader);
-    // De-Initialization
-    //--------------------------------------------------------------------------------------
     ma_device_uninit(&top.device);
     CloseAudioDevice();
-    CloseWindow();        // Close window and OpenGL context
-    //--------------------------------------------------------------------------------------
-
+    CloseWindow();
     return 0;
 }
