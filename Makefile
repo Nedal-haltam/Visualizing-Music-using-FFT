@@ -3,8 +3,9 @@
 
 all: build run
 
-build: main.c
-	gcc main.c -Wall -Wextra -Wpedantic -Iraylib/include -Lraylib/lib -lraylib -lgdi32 -lwinmm -o musulizer.exe
+build: main.cpp
+# g++ main.cpp -Wall -Wextra -Wpedantic -Iraylib/include -Lraylib/lib -lraylib -lgdi32 -lwinmm -o musulizer.exe
+	g++ main.cpp -Iraylib/include -Lraylib/lib -lraylib -lgdi32 -lwinmm -o musulizer.exe
 
 run: musulizer.exe
 	.\musulizer.exe
