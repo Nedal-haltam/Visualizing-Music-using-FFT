@@ -3,7 +3,8 @@
 #include <stdint.h>
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-
+// reference: https://github.com/tsoding/rendering-video-in-c-with-ffmpeg
+// i renamed it to ffmpeg.h
 typedef struct {
     HANDLE hProcess;
     // HANDLE hPipeRead;
@@ -29,7 +30,7 @@ static LPSTR GetLastErrorAsString(void)
             0, // DWORD   nSize,
             NULL // va_list *Arguments
         );
-
+    (void)size;
     return messageBuffer;
 }
 
@@ -69,7 +70,7 @@ FFMPEG *ffmpeg_start_rendering(size_t width, size_t height, size_t fps)
     ZeroMemory(&piProcInfo, sizeof(PROCESS_INFORMATION));
 
     char cmd_buffer[1024*2];
-    snprintf(cmd_buffer, sizeof(cmd_buffer), "ffmpeg.exe -loglevel verbose -y -f rawvideo -pix_fmt rgba -s %dx%d -r %d -i - -c:v libx264 -vb 2500k -c:a aac -ab 200k -pix_fmt yuv420p output.mp4", width, height, fps);
+    snprintf(cmd_buffer, sizeof(cmd_buffer), "ffmpeg.exe -loglevel verbose -y -f rawvideo -pix_fmt rgba -s %lldx%lld -r %lld -i - -c:v libx264 -vb 2500k -c:a aac -ab 200k -pix_fmt yuv420p output.mp4", width, height, fps);
 
     BOOL bSuccess =
         CreateProcess(

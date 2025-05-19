@@ -3,7 +3,7 @@
 #include <iostream>
 namespace raylib {
     #include <raylib.h>
-};
+}
 #include "ffmpeg.h"
 
 
