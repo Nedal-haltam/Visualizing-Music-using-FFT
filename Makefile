@@ -4,8 +4,7 @@
 all: build run
 
 build: main.cpp
-# g++ main.cpp -Wall -Wextra -Wpedantic -Iraylib/include -Lraylib/lib -lraylib -lgdi32 -lwinmm -o musulizer.exe
-	g++ main.cpp -Iraylib/include -Lraylib/lib -lraylib -lgdi32 -lwinmm -o musulizer.exe
+	g++ main.cpp -Wall -Wextra -Wpedantic -Iraylib/include -Lraylib/lib -lraylib -lgdi32 -lwinmm -std=c++20 -o musulizer.exe
 
 run: musulizer.exe
 	.\musulizer.exe

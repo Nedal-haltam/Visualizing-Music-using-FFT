@@ -6,13 +6,8 @@
 #include <math.h>
 #include <assert.h>
 #include "raylib.h"
-#include "nob.c"
 #include "miniaudio.c"
 
-
-typedef struct {
-    float x, y;
-} mycomplex;
 
 #define GetCurrentSample(cs) top.samples[cs]
 #define PLAYSTATEPATH ".\\resources\\icons\\play.png"
@@ -56,6 +51,21 @@ struct Sample {
     }
 };
 
+struct MyComplex {
+    float Real, Imag;
+    MyComplex(float Real, float Imag)
+    {
+        this->Real = Real;
+        this->Imag = Imag;
+    }
+    MyComplex()
+    {
+        this->Real = 0;
+        this->Imag = 0;
+    }
+};
+
+
 #include <vector>
 typedef struct {
     // Tracks
@@ -65,12 +75,12 @@ typedef struct {
     // Informative Buffers
     float in[N];
     float in2[N];
-    mycomplex out[N];
+    MyComplex out[N];
 
     // Visualized Smooth Buffers
     float in_raw[N];
     float in_win[N];
-    mycomplex out_raw[N];
+    MyComplex out_raw[N];
     float out_log[N];
     float out_smooth[N];
     float out_smear[N];
@@ -111,14 +121,14 @@ Entity top;
 
 // TODO: rendering video
 
-float amp(mycomplex z) {
-    float a = z.x;
-    float b = z.y;
+float amp(MyComplex z) {
+    float a = z.Real;
+    float b = z.Imag;
     return logf(a * a + b * b);
 }
 
-float amp1(mycomplex z) {
-    return fabsf(z.x);
+float amp1(MyComplex z) {
+    return fabsf(z.Real);
 }
 
 void load_assets(void) {
@@ -165,29 +175,29 @@ void Init() {
     top.volume = 0;
     top.volume_before_mute = 0;
     top.capturing = false;
-    top.Tracker_center = (Vector2){ .x = 0, .y = (float)h - 100 };
-    top.mp = (Vector2){ .x = 0, .y = 0 };
-    top.Volume_center = (Vector2){ .x = 0, .y = 0 };
+    top.Tracker_center = Vector2{ .x = 0, .y = (float)h - 100 };
+    top.mp = Vector2{ .x = 0, .y = 0 };
+    top.Volume_center = Vector2{ .x = 0, .y = 0 };
     load_assets();
 }
 
 void fft_clean(void) {
     memset(top.in_raw, 0, sizeof(top.in_raw));
     memset(top.in_win, 0, sizeof(top.in_win));
-    memset(top.out_raw, 0, sizeof(top.out_raw));
+    memset((void*)&top.out_raw, 0, sizeof(top.out_raw));
     memset(top.out_log, 0, sizeof(top.out_log));
     memset(top.out_smooth, 0, sizeof(top.out_smooth));
     memset(top.out_smear, 0, sizeof(top.out_smear));
     memset(top.in, 0, sizeof(top.in));
     memset(top.in2, 0, sizeof(top.in2));
-    memset(top.out, 0, sizeof(top.out));
+    memset((void*)&top.out, 0, sizeof(top.out));
 }
 
-void fft(float in[], size_t stride, mycomplex out[], size_t n) {
+void fft(float in[], size_t stride, MyComplex out[], size_t n) {
     assert(n > 0);
 
     if (n == 1) {
-        out[0] = (mycomplex) {.x = 0, .y = in[0]};
+        out[0] = MyComplex{.x = 0, .y = in[0]};
         return;
     }
 
@@ -196,17 +206,17 @@ void fft(float in[], size_t stride, mycomplex out[], size_t n) {
 
     for (size_t k = 0; k < n / 2; ++k) {
         float t = (float)k / n;
-        mycomplex v = { 0 };
-        mycomplex temp = {.x = cosf(-2 * PI * t), .y = sinf(-2 * PI * t),};
-        v.x = temp.x * out[k + n / 2].x - temp.y * out[k + n / 2].y;
-        v.y = temp.x * out[k + n / 2].y + out[k + n / 2].x * temp.y;
-        //mycomplex v = mulcc(cexpf(cfromimag(-2*PI*t)), out[k + n/2]);
-        mycomplex e = out[k];
-        out[k].x = e.x + v.x;
-        out[k].y = e.y + v.y;
+        MyComplex v = MyComplex(0, 0);
+        MyComplex temp = MyComplex(cosf(-2 * PI * t), sinf(-2 * PI * t));
+        v.Real = temp.Real * out[k + n / 2].Real - temp.Imag * out[k + n / 2].Imag;
+        v.Imag = temp.Real * out[k + n / 2].Imag + out[k + n / 2].Real * temp.Imag;
+        //MyComplex v = mulcc(cexpf(cfromimag(-2*PI*t)), out[k + n/2]);
+        MyComplex e = out[k];
+        out[k].Real = e.Real + v.Real;
+        out[k].Imag = e.Imag + v.Imag;
         //out[k]       = addcc(e, v);
-        out[k + n / 2].x = e.x - v.x;
-        out[k + n / 2].y = e.y - v.y;
+        out[k + n / 2].Real = e.Real - v.Real;
+        out[k + n / 2].Imag = e.Imag - v.Imag;
         //out[k + n/2] = subcc(e, v);
     }
 }
@@ -352,7 +362,7 @@ void fft_render(Rectangle boundary, size_t m) {
             boundary.y + boundary.height - boundary.height * 2 / 3 * end,
         };
         float radius = cell_width * 3 * sqrtf(end);
-        Vector2 origin = { 0 };
+        Vector2 origin = Vector2{0, 0};
         if (endPos.y >= startPos.y) {
             Rectangle dest = {
                 .x = startPos.x - radius / 2,
@@ -420,7 +430,7 @@ void FreqDomainVisual(Rectangle boundary) {
         size_t thr = N / 8;
         for (size_t i = 0; i < N; i++) {
             int j = (i + N / 2) % N;
-            mycomplex c = top.out[j];
+            MyComplex c = top.out[j];
             float t = amp1(c) / 10;
             float freq = t * boundary.height;
             if (i <= thr || i >= N - thr)
@@ -436,7 +446,7 @@ void FreqDomainVisual(Rectangle boundary) {
         float rw = (float)(boundary.width) / (N);
         for (size_t i = 0; i < N; i++) {
             int j = (i + N / 2) % N;
-            mycomplex c = top.out[j];
+            MyComplex c = top.out[j];
             float t = amp1(c);
             float freq = t * boundary.height;
             if (freq > boundary.height)
@@ -556,7 +566,7 @@ void file_name_to_name(const char* file_name, char* name) {
 }
 
 void POPUP_ErrorFileNotSupported(std::string name) {
-    // (void)name;
+    (void)name;
     assert(0 && "UNREACHABLE");
 }
 
@@ -801,7 +811,7 @@ int main(void)
         ClearBackground(BLACK);
 
         if (top.capturing) {
-            Visualize_FFT((CLITERAL(Rectangle) {
+            Visualize_FFT((Rectangle {
                 .x = 0,
                 .y = 0,
                 .width =  (float)w,
@@ -816,7 +826,7 @@ int main(void)
                 Rectangle boundary;
                 if (FULLSCREEN)
                 {
-                    boundary = (Rectangle) {
+                    boundary = Rectangle {
                         .x = 0,
                         .y = 0,
                         .width =  (float)w,
@@ -825,7 +835,7 @@ int main(void)
                 }
                 else
                 {
-                    boundary = (Rectangle) {
+                    boundary = Rectangle {
                         .x = playlist_width,
                         .y = 0,
                         .width =  (float)w - playlist_width,
