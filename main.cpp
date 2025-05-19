@@ -1,4 +1,5 @@
 #include <iostream>
+#include <vector>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
@@ -14,7 +15,9 @@ namespace raylib {
 #undef DrawText
 
 
+
 #define GetCurrentSample(cs) (assert(0 <= cs && cs < (int)top.samples.size() && "INVALID INDEX"), top.samples[cs])
+
 #define PLAYSTATEPATH ".\\resources\\icons\\play.png"
 #define PAUSESTATEPATH ".\\resources\\icons\\pause.png"
 #define VOLUMEHIGHICONPATH ".\\resources\\icons\\volumehigh.png"
@@ -24,18 +27,19 @@ namespace raylib {
 
 #define N (1<<13)
 
-#define Tracker_Radius 16
-#define fgap 20
-#define playlist_width 220
-#define tracker_height 130
-#define volline_height 6
+#define TRACHER_RADIUS 16
+#define GAP 20
+#define PLAYLIST_WIDTH 220
+#define TRACHER_HEIGHT 130
+#define VOLUME_LINE_HEIGHT 6
 #define FPS 60
-#define Display_FPS 70
-#define scale 0.07f
+#define ICON_SCALE 0.07f
 
-// constants we use
-int w = 1600;
-int h = 800;
+#define KEY_PAUSE_MUSIC raylib::KEY_SPACE
+#define KEY_FULLSCREEN raylib::KEY_F
+#define KEY_CAPUTRE_MICROPHONE raylib::KEY_C
+#define KEY_RENDER_VIDEO raylib::KEY_R
+
 
 struct Sample {
     raylib::Music music;
@@ -49,6 +53,7 @@ struct Sample {
         this->file_name = file_name;
         this->paused = paused;
     }
+    Sample(){}
 };
 
 struct MyComplex {
@@ -66,7 +71,6 @@ struct MyComplex {
 };
 
 
-#include <vector>
 typedef struct {
     // Tracks
     std::vector<Sample> samples;
@@ -118,8 +122,9 @@ typedef struct {
 } Entity;
 
 Entity top;
-
-// TODO: rendering video
+int w = 1600;
+int h = 800;
+raylib::Color BACKGROUND_COLOR = raylib::Color {.r = 0x20, .g = 0x20, .b = 0x20, .a = 0xFF};
 
 float amp(MyComplex z) 
 {
@@ -137,17 +142,17 @@ void load_assets(void)
 {
 
     top.Playstate = raylib::LoadTexture(PLAYSTATEPATH);
-    top.Playstate.width *= scale;
-    top.Playstate.height *= scale;
+    top.Playstate.width *= ICON_SCALE;
+    top.Playstate.height *= ICON_SCALE;
     top.Pausestate = raylib::LoadTexture(PAUSESTATEPATH);
-    top.Pausestate.width *= scale;
-    top.Pausestate.height *= scale;
+    top.Pausestate.width *= ICON_SCALE;
+    top.Pausestate.height *= ICON_SCALE;
     top.VolumeHigh_icon = raylib::LoadTexture(VOLUMEHIGHICONPATH);
-    top.VolumeHigh_icon.width *= scale;
-    top.VolumeHigh_icon.height *= scale;
+    top.VolumeHigh_icon.width *= ICON_SCALE;
+    top.VolumeHigh_icon.height *= ICON_SCALE;
     top.VolumeMute_icon = raylib::LoadTexture(VOLUMEMUTEICONPATH);
-    top.VolumeMute_icon.width *= scale;
-    top.VolumeMute_icon.height *= scale;
+    top.VolumeMute_icon.width *= ICON_SCALE;
+    top.VolumeMute_icon.height *= ICON_SCALE;
 
     raylib::Image icon = raylib::LoadImage(APPICONPATH);
     raylib::SetWindowIcon(icon);
@@ -383,9 +388,9 @@ void fft_render(raylib::Rectangle boundary, size_t m) {
     raylib::EndShaderMode();
 }
 
-void ShowFFT(raylib::Rectangle Show_boundary) {
+void ShowFFT(raylib::Rectangle Show_boundary, float dt) {
 
-    size_t m = fft_analyze(raylib::GetFrameTime());
+    size_t m = fft_analyze(dt);
 
     raylib::BeginScissorMode(Show_boundary.x, Show_boundary.y, Show_boundary.width, Show_boundary.height);
     fft_render(Show_boundary, m);
@@ -489,7 +494,7 @@ void Update() {
     
     raylib::UpdateMusicStream(GetCurrentSample(top.CurrentSample).music);
     top.t0 = raylib::GetMusicTimePlayed(GetCurrentSample(top.CurrentSample).music);
-    if (raylib::IsKeyPressed(raylib::KEY_SPACE)) {
+    if (raylib::IsKeyPressed(KEY_PAUSE_MUSIC)) {
         Toggle_CurrenSampleState();
     }
     top.Tracker_center.y = h - 100;
@@ -497,7 +502,7 @@ void Update() {
 
 void ManageTracker() {
     raylib::Rectangle tracker = { .x = 0, .y = (float)top.Tracker_center.y, .width = (float)w, .height = 1 };
-    raylib::Rectangle tracker_boundary = { .x = 0, .y = (float)top.Tracker_center.y - Tracker_Radius, .width = (float)w, .height = 2 * Tracker_Radius };
+    raylib::Rectangle tracker_boundary = { .x = 0, .y = (float)top.Tracker_center.y - TRACHER_RADIUS, .width = (float)w, .height = 2 * TRACHER_RADIUS };
     raylib::DrawRectangleRec(tracker, raylib::GRAY); // line for the tracker
     float posx = (top.t0 / top.len) * w;
     bool collision_with_a_tracker_boundary = raylib::CheckCollisionPointRec(top.mp, tracker_boundary);
@@ -525,7 +530,7 @@ void ManageTracker() {
     int DurationLength = raylib::MeasureText(DurationText, 20);
     raylib::DrawText(DurationText, w - DurationLength - 40, h - 65, 20, raylib::WHITE);
     top.Tracker_center.x = posx;
-    raylib::DrawCircleV(top.Tracker_center, Tracker_Radius, raylib::GRAY);
+    raylib::DrawCircleV(top.Tracker_center, TRACHER_RADIUS, raylib::GRAY);
 }
 
 void file_name_to_name(const char* file_name, char* name) {
@@ -569,9 +574,9 @@ void ManagePlayList() {
     // drawing the playlist
     static float playlist_scroll = 0;
     static float scroll_velocity = 0;
-    float playlist_boundary_height = top.Tracker_center.y - Tracker_Radius;
+    float playlist_boundary_height = top.Tracker_center.y - TRACHER_RADIUS;
     float item_height = playlist_boundary_height * (0.07f);
-    raylib::Rectangle playlist_boundary = { .x = 0, .y = 0, .width = playlist_width, .height = playlist_boundary_height };
+    raylib::Rectangle playlist_boundary = { .x = 0, .y = 0, .width = PLAYLIST_WIDTH, .height = playlist_boundary_height };
     bool colplaylistboundary = raylib::CheckCollisionPointRec(top.mp, playlist_boundary);
 
     if (raylib::CheckCollisionPointRec(top.mp, playlist_boundary)) {
@@ -610,7 +615,7 @@ void ManagePlayList() {
     raylib::EndScissorMode();
 
     if (top.samples.size() > 0) {
-        raylib::DrawRectangle(playlist_width, 0, 1, top.Tracker_center.y, raylib::GRAY); // line to split the playlist and the FFT
+        raylib::DrawRectangle(PLAYLIST_WIDTH, 0, 1, top.Tracker_center.y, raylib::GRAY); // line to split the playlist and the FFT
     }
     const char* samplescount = raylib::TextFormat("Samples Count : %d", top.samples.size());
     raylib::DrawText(samplescount, w - raylib::MeasureText(samplescount, 20) - 5, 0, 20, raylib::WHITE);
@@ -631,7 +636,7 @@ void MusicSettings() {
         raylib::SeekMusicStream(GetCurrentSample(top.CurrentSample).music, 0.0f);
     }
 
-    raylib::Vector2 PlayingState_pos = { .x = (float)btnreset.x + btnreset.width + fgap,
+    raylib::Vector2 PlayingState_pos = { .x = (float)btnreset.x + btnreset.width + GAP,
                                  .y = (float)btnreset.y + btnreset.height / 2 - top.Playstate.height / 2 };
     raylib::Rectangle PlayingState_boundary = { .x = (float)PlayingState_pos.x, .y = (float)PlayingState_pos.y, .width = (float)top.Playstate.width, .height = (float)top.Playstate.height };
     if (raylib::CheckCollisionPointRec(top.mp, PlayingState_boundary) && top.btnR) {
@@ -648,11 +653,11 @@ void MusicSettings() {
 
     // Volume
     static float volRadius = 10.0f;
-    raylib::Vector2 Volume_icon_pos = { .x = (float)PlayingState_pos.x + top.Playstate.width + fgap, .y = (float)btnreset.y + btnreset.height / 2 - top.VolumeHigh_icon.height / 2 };
+    raylib::Vector2 Volume_icon_pos = { .x = (float)PlayingState_pos.x + top.Playstate.width + GAP, .y = (float)btnreset.y + btnreset.height / 2 - top.VolumeHigh_icon.height / 2 };
     raylib::Rectangle Volume_icon_boundary = { .x = (float)Volume_icon_pos.x, .y = (float)Volume_icon_pos.y, .width = (float)top.VolumeHigh_icon.width, .height = (float)top.VolumeHigh_icon.height };
     raylib::Rectangle volline = {
-        .x = (float)Volume_icon_pos.x + top.VolumeHigh_icon.width + fgap + 20 , .y = (float)btnreset.y + btnreset.height / 2 - volline_height / 2,
-        .width = 250 , .height = volline_height
+        .x = (float)Volume_icon_pos.x + top.VolumeHigh_icon.width + GAP + 20 , .y = (float)btnreset.y + btnreset.height / 2 - VOLUME_LINE_HEIGHT / 2,
+        .width = 250 , .height = VOLUME_LINE_HEIGHT
     };
 
     if (raylib::CheckCollisionPointRec(top.mp, Volume_icon_boundary) && top.btnR) {
@@ -747,9 +752,53 @@ void toggle_capturing() {
     }
 }
 
-void Visualize_FFT(raylib::Rectangle boundary) 
+void Visualize_FFT(raylib::Rectangle boundary, float dt) 
 {
-    ShowFFT(boundary);
+    ShowFFT(boundary, dt);
+}
+
+void RenderVideo()
+{
+
+    // raylib::RenderTexture2D screen = raylib::LoadRenderTexture(w, h);
+    // for (int i = 0; i < FPS*DURATION && !raylib::WindowShouldClose(); ++i) {
+    //     raylib::BeginDrawing();
+    //     raylib::BeginTextureMode(screen);
+    //     raylib::ClearBackground(BACKGROUND_COLOR);
+    //     // here we draw
+    //     Update();
+    //     raylib::Rectangle boundary;
+    //     boundary = raylib::Rectangle {
+    //         .x = 0,
+    //         .y = 0,
+    //         .width =  (float)w,
+    //         .height = (float)h
+    //     };
+    //     Visualize_FFT(boundary);
+    //     raylib::EndTextureMode();
+
+    //     raylib::ClearBackground(BACKGROUND_COLOR);
+    //     const char* msg = raylib::TextFormat("finished: %d/%d", i, FPS*DURATION);
+    //     int msglength = raylib::MeasureText(msg, 30);
+    //     raylib::DrawText(msg, w / 2 - msglength / 2, h / 2 - 15, 30, raylib::WHITE);
+    //     raylib::EndDrawing();
+
+    //     raylib::Image image = raylib::LoadImageFromTexture(screen.texture);
+    //     ffmpeg_send_frame_flipped(ffmpeg, image.data, w, h);
+    //     raylib::UnloadImage(image);
+    // }
+    // raylib::UnloadRenderTexture(screen);
+    
+    // ffmpeg_end_rendering(ffmpeg);
+    // raylib::SetTargetFPS(FPS);
+    // fft_clean();
+    // return;
+}
+
+void fft_push(float frame)
+{
+    memmove(top.in_raw, top.in_raw + 1, (N - 1)*sizeof(top.in_raw[0]));
+    top.in_raw[N-1] = frame;
 }
 
 int main(void)
@@ -757,16 +806,41 @@ int main(void)
     raylib::SetConfigFlags(raylib::FLAG_WINDOW_RESIZABLE | raylib::FLAG_WINDOW_ALWAYS_RUN);
     Init();
     bool FULLSCREEN = false;
+    bool RENDERING = false;
+    unsigned int Wave_cursor;
+    Sample s;
+    raylib::Wave Wave;
+    float* Wave_samples;
+    FFMPEG* ffmpeg;
+    raylib::RenderTexture2D screen;
     while (!raylib::WindowShouldClose())
     {
         w = raylib::GetScreenWidth();
         h = raylib::GetScreenHeight();
-        if (raylib::IsKeyPressed(raylib::KEY_F))
+        if (raylib::IsKeyPressed(KEY_FULLSCREEN))
             FULLSCREEN = !FULLSCREEN;
-        if (raylib::IsKeyPressed(raylib::KEY_C))
+        if (raylib::IsKeyPressed(KEY_CAPUTRE_MICROPHONE))
             toggle_capturing();
+        if (raylib::IsKeyPressed(KEY_RENDER_VIDEO))
+        {
+            RENDERING = true;
+            raylib::StopMusicStream(GetCurrentSample(top.CurrentSample).music);
+            // raylib::PauseMusicStream(GetCurrentSample(top.CurrentSample).music);
+            GetCurrentSample(top.CurrentSample).paused = true;
+            fft_clean();
+            
+            Wave_cursor = 0;
+            s = GetCurrentSample(top.CurrentSample);
+            Wave = raylib::LoadWave(s.file_name);
+            Wave_samples = raylib::LoadWaveSamples(Wave);
+            ffmpeg = ffmpeg_start_rendering(w, h, FPS, s.file_name);
+            // ffmpeg = ffmpeg_start_rendering(w, h, FPS);
+            raylib::SetTargetFPS(0);
+            screen = raylib::LoadRenderTexture(w, h);
+        }
+
         raylib::BeginDrawing();
-        raylib::ClearBackground(raylib::BLACK);
+        raylib::ClearBackground(BACKGROUND_COLOR);
 
         if (top.capturing) {
             Visualize_FFT((raylib::Rectangle {
@@ -774,9 +848,9 @@ int main(void)
                 .y = 0,
                 .width =  (float)w,
                 .height = (float)h,
-            }));
+            }), 1.0f / FPS);
         }
-        else 
+        else if (!RENDERING)
         {
            if (top.samples.size() > 0) 
             {
@@ -794,13 +868,13 @@ int main(void)
                 else
                 {
                     boundary = raylib::Rectangle {
-                        .x = playlist_width,
+                        .x = PLAYLIST_WIDTH,
                         .y = 0,
-                        .width =  (float)w - playlist_width,
-                        .height = (float)h - tracker_height
+                        .width =  (float)w - PLAYLIST_WIDTH,
+                        .height = (float)h - TRACHER_HEIGHT
                     };
                 }
-                Visualize_FFT(boundary);
+                Visualize_FFT(boundary, 1.0f / FPS);
                 if (!FULLSCREEN)
                     ManageFeatures();
             }
@@ -809,7 +883,55 @@ int main(void)
                 Init_Screen();
             }
         }
+        else
+        {
+            size_t chunk_size = Wave.sampleRate/FPS;
+            // std::cout << "CHUNK SIZE: " << chunk_size << "\n";
+            float *fs = Wave_samples;
+            for (size_t i = 0; i < chunk_size; ++i) {
+                if (Wave_cursor < Wave.frameCount) {
+                    fft_push(fs[Wave_cursor*Wave.channels + 0]);
+                } else {
+                    fft_push(0);
+                }
+                Wave_cursor += 1;
+            }
 
+            raylib::BeginTextureMode(screen);
+            raylib::ClearBackground(BACKGROUND_COLOR);
+            Visualize_FFT((raylib::Rectangle {
+                .x = 0,
+                .y = 0,
+                .width =  (float)w,
+                .height = (float)h,
+            }), 1.0f / FPS);
+            raylib::EndTextureMode();
+            raylib::Image image = raylib::LoadImageFromTexture(screen.texture);
+            ffmpeg_send_frame_flipped(ffmpeg, image.data, w, h);
+            raylib::UnloadImage(image);
+            
+            raylib::ClearBackground(BACKGROUND_COLOR);
+            float Progress = (float)Wave_cursor / Wave.frameCount;
+            float ProgressBarWidth = (float)w / 3;
+            float ProgressBarHeight = (float)h / 10;
+            raylib::Rectangle ProgressBar = raylib::Rectangle {.x = w / 2 - ProgressBarWidth / 2, .y = h / 2 - ProgressBarHeight / 2, .width = Progress * ProgressBarWidth, .height = ProgressBarHeight};
+            raylib::DrawRectangleRec(ProgressBar, raylib::WHITE);
+            raylib::Rectangle ProgressBarBoundary = raylib::Rectangle {.x = w / 2 - ProgressBarWidth / 2, .y = h / 2 - ProgressBarHeight / 2, .width = ProgressBarWidth, .height = ProgressBarHeight};
+            raylib::DrawRectangleLinesEx(ProgressBarBoundary, 10.0f, raylib::WHITE);
+
+            if (Wave_cursor >= Wave.frameCount)
+            {
+                raylib::UnloadRenderTexture(screen);
+                ffmpeg_end_rendering(ffmpeg);
+                raylib::UnloadWave(Wave);
+                raylib::UnloadWaveSamples(Wave_samples);
+                raylib::SetTargetFPS(FPS);
+                fft_clean();
+                raylib::PlayMusicStream(GetCurrentSample(top.CurrentSample).music);
+                GetCurrentSample(top.CurrentSample).paused = false;
+                RENDERING = false;
+            }
+        }
         raylib::EndDrawing();
     }
 
