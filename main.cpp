@@ -32,7 +32,7 @@ namespace raylib {
 #define PLAYLIST_WIDTH 220
 #define TRACHER_HEIGHT 130
 #define VOLUME_LINE_HEIGHT 6
-#define FPS 60
+#define FPS 120
 #define ICON_SCALE 0.07f
 
 #define KEY_PAUSE_MUSIC raylib::KEY_SPACE
@@ -862,6 +862,7 @@ int main(void)
                 RENDERING = false;
             }
         }
+        raylib::DrawFPS(0, 0);
         raylib::EndDrawing();
         top.Quit = raylib::IsKeyPressed(raylib::KEY_ESCAPE) && !FULLSCREEN && !top.capturing && !RENDERING;
     }
