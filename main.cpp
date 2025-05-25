@@ -27,7 +27,7 @@ namespace raylib {
 
 #define N (1<<13)
 
-#define TRACHER_RADIUS 16
+#define TRACKER_RADIUS 16
 #define GAP 20
 #define PLAYLIST_WIDTH 220
 #define TRACHER_HEIGHT 130
@@ -470,7 +470,7 @@ void Update() {
 
 void ManageTracker() {
     raylib::Rectangle tracker = { .x = 0, .y = (float)top.Tracker_center.y, .width = (float)w, .height = 1 };
-    raylib::Rectangle tracker_boundary = { .x = 0, .y = (float)top.Tracker_center.y - TRACHER_RADIUS, .width = (float)w, .height = 2 * TRACHER_RADIUS };
+    raylib::Rectangle tracker_boundary = { .x = 0, .y = (float)top.Tracker_center.y - TRACKER_RADIUS, .width = (float)w, .height = 2 * TRACKER_RADIUS };
     raylib::DrawRectangleRec(tracker, raylib::GRAY); // line for the tracker
     float posx = (top.t0 / top.len) * w;
     bool collision_with_a_tracker_boundary = raylib::CheckCollisionPointRec(top.mp, tracker_boundary);
@@ -498,7 +498,7 @@ void ManageTracker() {
     int DurationLength = raylib::MeasureText(DurationText, 20);
     raylib::DrawText(DurationText, w - DurationLength - 40, h - 65, 20, raylib::WHITE);
     top.Tracker_center.x = posx;
-    raylib::DrawCircleV(top.Tracker_center, TRACHER_RADIUS, raylib::GRAY);
+    raylib::DrawCircleV(top.Tracker_center, TRACKER_RADIUS, raylib::GRAY);
 }
 
 void file_name_to_name(const char* file_name, char* name) {
@@ -542,7 +542,7 @@ void ManagePlayList() {
     // drawing the playlist
     static float playlist_scroll = 0;
     static float scroll_velocity = 0;
-    float playlist_boundary_height = top.Tracker_center.y - TRACHER_RADIUS;
+    float playlist_boundary_height = top.Tracker_center.y - TRACKER_RADIUS;
     float item_height = playlist_boundary_height * (0.07f);
     raylib::Rectangle playlist_boundary = { .x = 0, .y = 0, .width = PLAYLIST_WIDTH, .height = playlist_boundary_height };
     bool colplaylistboundary = raylib::CheckCollisionPointRec(top.mp, playlist_boundary);
