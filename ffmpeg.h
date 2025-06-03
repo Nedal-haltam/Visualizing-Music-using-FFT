@@ -38,7 +38,7 @@ FFMPEG *ffmpeg_start_rendering(size_t width, size_t height, size_t fps, char* MU
     HANDLE pipe_read;
     HANDLE pipe_write;
 
-    SECURITY_ATTRIBUTES saAttr = {0};
+    SECURITY_ATTRIBUTES saAttr = {};
     saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
     saAttr.bInheritHandle = TRUE;
 

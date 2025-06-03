@@ -32,7 +32,7 @@ namespace raylib {
 #define PLAYLIST_WIDTH 220
 #define TRACHER_HEIGHT 130
 #define VOLUME_LINE_HEIGHT 6
-#define FPS 120
+#define FPS 60
 #define ICON_SCALE 0.07f
 
 #define KEY_PAUSE_MUSIC raylib::KEY_SPACE
@@ -120,9 +120,8 @@ typedef struct {
 } Entity;
 
 Entity top;
-int WindowSize = 85;
-int w = 16*WindowSize;
-int h = 9*WindowSize;
+int w = 1280;
+int h = 720;
 raylib::Color BACKGROUND_COLOR = raylib::Color {.r = 0x20, .g = 0x20, .b = 0x20, .a = 0xFF};
 
 float amp(MyComplex z) 
@@ -720,9 +719,7 @@ void ToggleMicrophoneCapture() {
 void VisualizeFFT(raylib::Rectangle boundary, float dt) 
 {
     size_t m = fft_analyze(dt);
-    raylib::BeginScissorMode(boundary.x, boundary.y, boundary.width, boundary.height);
     fft_render(boundary, m);
-    raylib::EndScissorMode();
 }
 
 void fft_push(float frame)
@@ -753,6 +750,7 @@ int main(void)
             ToggleMicrophoneCapture();
         if (raylib::IsKeyPressed(KEY_RENDER_VIDEO) && !RENDERING)
         {
+            screen = raylib::LoadRenderTexture(1280, 720);
             RENDERING = true;
             raylib::PauseMusicStream(GetCurrentSample(top.CurrentSample).music);
             GetCurrentSample(top.CurrentSample).paused = true;
@@ -762,9 +760,8 @@ int main(void)
             s = GetCurrentSample(top.CurrentSample);
             Wave = raylib::LoadWave(s.file_name);
             WaveSamples = raylib::LoadWaveSamples(Wave);
-            ffmpeg = ffmpeg_start_rendering(w, h, FPS, s.file_name);
+            ffmpeg = ffmpeg_start_rendering(screen.texture.width, screen.texture.height, FPS, s.file_name);
             raylib::SetTargetFPS(0);
-            screen = raylib::LoadRenderTexture(w, h);
         }
 
         raylib::BeginDrawing();
@@ -815,9 +812,9 @@ int main(void)
         }
         else
         {
-            size_t chunk_size = Wave.sampleRate/FPS;
+            size_t ChunkSize = Wave.sampleRate/FPS;
             float *fs = WaveSamples;
-            for (size_t i = 0; i < chunk_size; ++i) {
+            for (size_t i = 0; i < ChunkSize; ++i) {
                 if (WaveCursor < Wave.frameCount) {
                     fft_push(fs[WaveCursor*Wave.channels + 0]);
                 } else {
@@ -831,12 +828,12 @@ int main(void)
             VisualizeFFT((raylib::Rectangle {
                 .x = 0,
                 .y = 0,
-                .width =  (float)w,
-                .height = (float)h,
+                .width =  (float)screen.texture.width,
+                .height = (float)screen.texture.height,
             }), 1.0f / FPS);
             raylib::EndTextureMode();
             raylib::Image image = raylib::LoadImageFromTexture(screen.texture);
-            ffmpeg_send_frame_flipped(ffmpeg, image.data, w, h);
+            ffmpeg_send_frame_flipped(ffmpeg, image.data, screen.texture.width, screen.texture.height);
             raylib::UnloadImage(image);
             
             raylib::ClearBackground(BACKGROUND_COLOR);
@@ -877,3 +874,5 @@ int main(void)
     raylib::CloseWindow();
     return 0;
 }
+
+
