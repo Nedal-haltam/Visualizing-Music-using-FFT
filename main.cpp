@@ -9,22 +9,34 @@
 namespace raylib {
     #include <raylib.h>
 }
+#ifdef FFMPEG_ENABLE
 #include "ffmpeg.h"
+#endif
 #include "miniaudio.c"
 #undef LoadImage
 #undef DrawText
 
-
+#ifdef PLATFORM_WEB
+#include <emscripten/emscripten.h>
+#endif
 
 #define GetCurrentSample(cs) (assert(0 <= cs && cs < (int)top.samples.size() && "INVALID INDEX"), top.samples[cs])
 
+#ifndef PLATFORM_WEB
 #define PLAYSTATEPATH ".\\resources\\icons\\play.png"
 #define PAUSESTATEPATH ".\\resources\\icons\\pause.png"
 #define VOLUMEHIGHICONPATH ".\\resources\\icons\\volumehigh.png"
 #define VOLUMEMUTEICONPATH ".\\resources\\icons\\mute.png"
 #define APPICONPATH ".\\resources\\icons\\images.png"
 #define SHADERCIRCLEPATH ".\\resources\\shaders\\glsl330\\circle.fs"
-
+#else
+#define PLAYSTATEPATH "resources/icons/play.png"
+#define PAUSESTATEPATH "resources/icons/pause.png"
+#define VOLUMEHIGHICONPATH "resources/icons/volumehigh.png"
+#define VOLUMEMUTEICONPATH "resources/icons/mute.png"
+#define APPICONPATH "resources/icons/images.png"
+#define SHADERCIRCLEPATH "resources/shaders/glsl330/circle_web.fs"
+#endif
 #define N (1<<13)
 
 #define TRACKER_RADIUS 16
@@ -197,7 +209,7 @@ void fft(float in[], size_t stride, MyComplex out[], size_t n)
     assert(n > 0);
 
     if (n == 1) {
-        out[0] = MyComplex{.x = 0, .y = in[0]};
+        out[0] = MyComplex{0, in[0]};
         return;
     }
 
@@ -528,7 +540,7 @@ void ManagePlayList() {
                 if (raylib::IsMusicValid(music)) {
 
                     AttachAudioStreamProcessor(music.stream, CallBack);
-                    top.samples.push_back(Sample(music, _strdup(temp), _strdup(FilePathList.paths[i]), false));
+                    top.samples.push_back(Sample(music, strdup(temp), strdup(FilePathList.paths[i]), false));
                 }
                 else {
                     // POPUPErrorFileNotSupported(FilePathList.paths[i]);
@@ -728,142 +740,164 @@ void fft_push(float frame)
     top.in_raw[N-1] = frame;
 }
 
-int main(void)
-{
-    
-    Init();
-    bool FULLSCREEN = false;
-    bool RENDERING = false;
+
+
+bool FULLSCREEN = false;
+bool RENDERING = false;
+#ifdef FFMPEG_ENABLE
     unsigned int WaveCursor;
     Sample s;
     raylib::Wave Wave;
     float* WaveSamples;
     FFMPEG* ffmpeg;
     raylib::RenderTexture2D screen;
+#endif
+
+void MainLoop()
+{
+    w = raylib::GetScreenWidth();
+    h = raylib::GetScreenHeight();
+    if (raylib::IsKeyPressed(KEY_FULLSCREEN))
+        FULLSCREEN = !FULLSCREEN;
+    if (raylib::IsKeyPressed(KEY_CAPUTRE_MICROPHONE))
+        ToggleMicrophoneCapture();
+#ifdef FFMPEG_ENABLE
+    if (raylib::IsKeyPressed(KEY_RENDER_VIDEO) && !RENDERING)
+    {
+        screen = raylib::LoadRenderTexture(1280, 720);
+        RENDERING = true;
+        raylib::PauseMusicStream(GetCurrentSample(top.CurrentSample).music);
+        GetCurrentSample(top.CurrentSample).paused = true;
+        FFTClean();
+        
+        WaveCursor = 0;
+        s = GetCurrentSample(top.CurrentSample);
+        Wave = raylib::LoadWave(s.file_name);
+        WaveSamples = raylib::LoadWaveSamples(Wave);
+        ffmpeg = ffmpeg_start_rendering(screen.texture.width, screen.texture.height, FPS, s.file_name);
+        raylib::SetTargetFPS(0);
+    }
+#endif
+    raylib::BeginDrawing();
+    raylib::ClearBackground(BACKGROUND_COLOR);
+
+    if (top.capturing) {
+        VisualizeFFT((raylib::Rectangle {
+            .x = 0,
+            .y = 0,
+            .width =  (float)w,
+            .height = (float)h,
+        }), 1.0f / FPS);
+        if (raylib::IsKeyPressed(raylib::KEY_ESCAPE)) ToggleMicrophoneCapture();
+    }
+    else if (!RENDERING)
+    {
+        if (top.samples.size() > 0) 
+        {
+            Update();
+            raylib::Rectangle boundary;
+            if (FULLSCREEN)
+            {
+                boundary = raylib::Rectangle {
+                    .x = 0,
+                    .y = 0,
+                    .width =  (float)w,
+                    .height = (float)h
+                };
+                if (raylib::IsKeyPressed(raylib::KEY_ESCAPE)) FULLSCREEN = false;
+            }
+            else
+            {
+                boundary = raylib::Rectangle {
+                    .x = PLAYLIST_WIDTH,
+                    .y = 0,
+                    .width =  (float)w - PLAYLIST_WIDTH,
+                    .height = (float)h - TRACHER_HEIGHT
+                };
+            }
+            VisualizeFFT(boundary, 1.0f / FPS);
+            if (!FULLSCREEN)
+                ManageFeatures();
+        }
+        else {
+            ManagePlayList();
+            InitScreen();
+        }
+    }
+#ifdef FFMPEG_ENABLE
+    else if (RENDERING)
+    {
+        size_t ChunkSize = Wave.sampleRate/FPS;
+        float *fs = WaveSamples;
+        for (size_t i = 0; i < ChunkSize; ++i) {
+            if (WaveCursor < Wave.frameCount) {
+                fft_push(fs[WaveCursor*Wave.channels + 0]);
+            } else {
+                fft_push(0);
+            }
+            WaveCursor += 1;
+        }
+
+        raylib::BeginTextureMode(screen);
+        raylib::ClearBackground(BACKGROUND_COLOR);
+        VisualizeFFT((raylib::Rectangle {
+            .x = 0,
+            .y = 0,
+            .width =  (float)screen.texture.width,
+            .height = (float)screen.texture.height,
+        }), 1.0f / FPS);
+        raylib::EndTextureMode();
+        raylib::Image image = raylib::LoadImageFromTexture(screen.texture);
+        ffmpeg_send_frame_flipped(ffmpeg, image.data, screen.texture.width, screen.texture.height);
+        raylib::UnloadImage(image);
+        
+        raylib::ClearBackground(BACKGROUND_COLOR);
+        float Progress = (float)WaveCursor / Wave.frameCount;
+        float ProgressBarWidth = (float)w / 3;
+        float ProgressBarHeight = (float)h / 10;
+        raylib::Rectangle ProgressBar = raylib::Rectangle {.x = w / 2 - ProgressBarWidth / 2, .y = h / 2 - ProgressBarHeight / 2, .width = Progress * ProgressBarWidth, .height = ProgressBarHeight};
+        raylib::DrawRectangleRec(ProgressBar, raylib::WHITE);
+        raylib::Rectangle ProgressBarBoundary = raylib::Rectangle {.x = w / 2 - ProgressBarWidth / 2, .y = h / 2 - ProgressBarHeight / 2, .width = ProgressBarWidth, .height = ProgressBarHeight};
+        raylib::DrawRectangleLinesEx(ProgressBarBoundary, 10.0f, raylib::WHITE);
+
+        if (raylib::IsKeyPressed(raylib::KEY_ESCAPE)) RENDERING = false;
+        if (WaveCursor >= Wave.frameCount || !RENDERING)
+        {
+            raylib::UnloadRenderTexture(screen);
+            ffmpeg_end_rendering(ffmpeg);
+            raylib::UnloadWave(Wave);
+            raylib::UnloadWaveSamples(WaveSamples);
+            raylib::SetTargetFPS(FPS);
+            FFTClean();
+            raylib::PlayMusicStream(GetCurrentSample(top.CurrentSample).music);
+            GetCurrentSample(top.CurrentSample).paused = false;
+            RENDERING = false;
+        }
+    }
+#endif
+    raylib::DrawFPS(0, 0);
+    raylib::EndDrawing();
+    top.Quit = raylib::WindowShouldClose() || (raylib::IsKeyPressed(raylib::KEY_ESCAPE) && !FULLSCREEN && !top.capturing && !RENDERING);
+}
+
+void UpdateDrawFrame() {
     while (!top.Quit)
     {
-        w = raylib::GetScreenWidth();
-        h = raylib::GetScreenHeight();
-        if (raylib::IsKeyPressed(KEY_FULLSCREEN))
-            FULLSCREEN = !FULLSCREEN;
-        if (raylib::IsKeyPressed(KEY_CAPUTRE_MICROPHONE))
-            ToggleMicrophoneCapture();
-        if (raylib::IsKeyPressed(KEY_RENDER_VIDEO) && !RENDERING)
-        {
-            screen = raylib::LoadRenderTexture(1280, 720);
-            RENDERING = true;
-            raylib::PauseMusicStream(GetCurrentSample(top.CurrentSample).music);
-            GetCurrentSample(top.CurrentSample).paused = true;
-            FFTClean();
-            
-            WaveCursor = 0;
-            s = GetCurrentSample(top.CurrentSample);
-            Wave = raylib::LoadWave(s.file_name);
-            WaveSamples = raylib::LoadWaveSamples(Wave);
-            ffmpeg = ffmpeg_start_rendering(screen.texture.width, screen.texture.height, FPS, s.file_name);
-            raylib::SetTargetFPS(0);
-        }
-
-        raylib::BeginDrawing();
-        raylib::ClearBackground(BACKGROUND_COLOR);
-
-        if (top.capturing) {
-            VisualizeFFT((raylib::Rectangle {
-                .x = 0,
-                .y = 0,
-                .width =  (float)w,
-                .height = (float)h,
-            }), 1.0f / FPS);
-            if (raylib::IsKeyPressed(raylib::KEY_ESCAPE)) ToggleMicrophoneCapture();
-        }
-        else if (!RENDERING)
-        {
-           if (top.samples.size() > 0) 
-            {
-                Update();
-                raylib::Rectangle boundary;
-                if (FULLSCREEN)
-                {
-                    boundary = raylib::Rectangle {
-                        .x = 0,
-                        .y = 0,
-                        .width =  (float)w,
-                        .height = (float)h
-                    };
-                    if (raylib::IsKeyPressed(raylib::KEY_ESCAPE)) FULLSCREEN = false;
-                }
-                else
-                {
-                    boundary = raylib::Rectangle {
-                        .x = PLAYLIST_WIDTH,
-                        .y = 0,
-                        .width =  (float)w - PLAYLIST_WIDTH,
-                        .height = (float)h - TRACHER_HEIGHT
-                    };
-                }
-                VisualizeFFT(boundary, 1.0f / FPS);
-                if (!FULLSCREEN)
-                    ManageFeatures();
-            }
-            else {
-                ManagePlayList();
-                InitScreen();
-            }
-        }
-        else
-        {
-            size_t ChunkSize = Wave.sampleRate/FPS;
-            float *fs = WaveSamples;
-            for (size_t i = 0; i < ChunkSize; ++i) {
-                if (WaveCursor < Wave.frameCount) {
-                    fft_push(fs[WaveCursor*Wave.channels + 0]);
-                } else {
-                    fft_push(0);
-                }
-                WaveCursor += 1;
-            }
-
-            raylib::BeginTextureMode(screen);
-            raylib::ClearBackground(BACKGROUND_COLOR);
-            VisualizeFFT((raylib::Rectangle {
-                .x = 0,
-                .y = 0,
-                .width =  (float)screen.texture.width,
-                .height = (float)screen.texture.height,
-            }), 1.0f / FPS);
-            raylib::EndTextureMode();
-            raylib::Image image = raylib::LoadImageFromTexture(screen.texture);
-            ffmpeg_send_frame_flipped(ffmpeg, image.data, screen.texture.width, screen.texture.height);
-            raylib::UnloadImage(image);
-            
-            raylib::ClearBackground(BACKGROUND_COLOR);
-            float Progress = (float)WaveCursor / Wave.frameCount;
-            float ProgressBarWidth = (float)w / 3;
-            float ProgressBarHeight = (float)h / 10;
-            raylib::Rectangle ProgressBar = raylib::Rectangle {.x = w / 2 - ProgressBarWidth / 2, .y = h / 2 - ProgressBarHeight / 2, .width = Progress * ProgressBarWidth, .height = ProgressBarHeight};
-            raylib::DrawRectangleRec(ProgressBar, raylib::WHITE);
-            raylib::Rectangle ProgressBarBoundary = raylib::Rectangle {.x = w / 2 - ProgressBarWidth / 2, .y = h / 2 - ProgressBarHeight / 2, .width = ProgressBarWidth, .height = ProgressBarHeight};
-            raylib::DrawRectangleLinesEx(ProgressBarBoundary, 10.0f, raylib::WHITE);
-
-            if (raylib::IsKeyPressed(raylib::KEY_ESCAPE)) RENDERING = false;
-            if (WaveCursor >= Wave.frameCount || !RENDERING)
-            {
-                raylib::UnloadRenderTexture(screen);
-                ffmpeg_end_rendering(ffmpeg);
-                raylib::UnloadWave(Wave);
-                raylib::UnloadWaveSamples(WaveSamples);
-                raylib::SetTargetFPS(FPS);
-                FFTClean();
-                raylib::PlayMusicStream(GetCurrentSample(top.CurrentSample).music);
-                GetCurrentSample(top.CurrentSample).paused = false;
-                RENDERING = false;
-            }
-        }
-        raylib::DrawFPS(0, 0);
-        raylib::EndDrawing();
-        top.Quit = raylib::IsKeyPressed(raylib::KEY_ESCAPE) && !FULLSCREEN && !top.capturing && !RENDERING;
+        MainLoop();
     }
+}
 
+
+
+
+int main(void)
+{
+    Init();
+#ifdef PLATFORM_WEB
+    emscripten_set_main_loop(MainLoop, 0, 1);
+#else
+    UpdateDrawFrame();
+#endif
     raylib::UnloadTexture(top.Playstate);
     raylib::UnloadTexture(top.Pausestate);
     raylib::UnloadTexture(top.VolumeHigh_icon);
@@ -874,5 +908,3 @@ int main(void)
     raylib::CloseWindow();
     return 0;
 }
-
-

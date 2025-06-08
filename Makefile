@@ -1,13 +1,12 @@
 
 
+all: native web
 
-all: build run
+native: main.cpp
+	g++ main.cpp -Wall -Wextra -Wpedantic -DFFMPEG_ENABLE -Iraylib/include -Lraylib/lib -lraylib -lgdi32 -lwinmm -std=c++20 -o musulizer.exe
 
-build: main.cpp
-	g++ main.cpp -Wall -Wextra -Wpedantic -Iraylib/include -Lraylib/lib -lraylib -lgdi32 -lwinmm -std=c++20 -o musulizer.exe
-
-run: musulizer.exe
-	.\musulizer.exe
+web: main.cpp
+	emcc -o ./web/musulizer.html main.cpp -Os -Wall ./libraylib.web.a -Iraylib/include -L. -s USE_GLFW=3 -s ASYNCIFY --preload-file resources --shell-file .\shell.html -DPLATFORM_WEB
 
 clean:
 	del /Q musulizer.exe 2>nul || exit 0
