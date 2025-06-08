@@ -7,6 +7,3 @@ native: main.cpp
 
 web: main.cpp
 	emcc -o ./web/musulizer.html main.cpp -Os -Wall ./libraylib.web.a -Iraylib/include -L. -s USE_GLFW=3 -s ASYNCIFY --preload-file resources --shell-file .\shell.html -DPLATFORM_WEB
-
-clean:
-	del /Q musulizer.exe 2>nul || exit 0
