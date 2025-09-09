@@ -860,7 +860,7 @@ void MainLoop()
         raylib::Rectangle ProgressBarBoundary = raylib::Rectangle {.x = w / 2 - ProgressBarWidth / 2, .y = h / 2 - ProgressBarHeight / 2, .width = ProgressBarWidth, .height = ProgressBarHeight};
         raylib::DrawRectangleLinesEx(ProgressBarBoundary, 10.0f, raylib::WHITE);
 
-        if (raylib::IsKeyPressed(raylib::KEY_ESCAPE)) RENDERING = false;
+        if (raylib::IsKeyPressed(raylib::KEY_Q)) RENDERING = false;
         if (WaveCursor >= Wave.frameCount || !RENDERING)
         {
             raylib::UnloadRenderTexture(screen);
