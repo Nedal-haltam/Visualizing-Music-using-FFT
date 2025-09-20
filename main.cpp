@@ -788,7 +788,6 @@ void MainLoop()
             .width =  (float)w,
             .height = (float)h,
         }), 1.0f / FPS);
-        if (raylib::IsKeyPressed(raylib::KEY_ESCAPE)) ToggleMicrophoneCapture();
     }
     else if (!RENDERING)
     {
